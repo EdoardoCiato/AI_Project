@@ -19,6 +19,8 @@ def load_documents():
     converter = DocumentConverter()
     doc = converter.convert(source).document
     tables = doc.tables
+    for tab in tables:
+        print(tab.export_to_markdown())
 
 # populate_database.py
 
