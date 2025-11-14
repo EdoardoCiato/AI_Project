@@ -1,0 +1,124 @@
+# Berkeley
+```json
+UNIVERSITY_CATALOG = [
+  {
+    "name": "Berkeley",
+    "location_city": "unknown",
+    "location_state_or_region": "unknown",
+    "institution_type": "4-year, Public",
+    "tuition_2024_2025": 12762,
+    "fees_2024_2025": 3104,
+    "total_cost_on_campus_2024_2025": 68550,
+    "books_supplies_2024_2025": 1118,
+    "application_fee_2024_2025": 80,
+    "in_state_tuition_2024_2025": 12762,
+    "out_of_state_tuition_2024_2025": 27864,
+    "undergraduate_enrollment": "unknown",
+    "acceptance_rate": "unknown",
+    "sat_ebrw_25th": "unknown",
+    "sat_ebrw_50th": "unknown",
+    "sat_ebrw_75th": "unknown",
+    "sat_math_25th": "unknown",
+    "sat_math_50th": "unknown",
+    "sat_math_75th": "unknown",
+    "act_composite_25th": "unknown",
+    "act_composite_50th": "unknown",
+    "act_composite_75th": "unknown",
+    "notable_programs_or_features": []
+  }
+]
+```
+
+# Harvard University
+```json
+UNIVERSITY_CATALOG = [
+  {
+    "name": "Harvard University",
+    "location_city": "Cambridge",
+    "location_state_or_region": "Massachusetts",
+    "institution_type": "4-year, Private not-for-profit",
+    "tuition_2024_2025": 55656,
+    "fees_2024_2025": 1592,
+    "total_cost_on_campus_2024_2025": 57248,
+    "books_supplies_2024_2025": 0,
+    "application_fee_2024_2025": null,
+    "in_state_tuition_2024_2025": null,
+    "out_of_state_tuition_2024_2025": null,
+    "undergraduate_enrollment": null,
+    "acceptance_rate": null,
+    "sat_ebrw_25th": null,
+    "sat_ebrw_50th": null,
+    "sat_ebrw_75th": null,
+    "sat_math_25th": null,
+    "sat_math_50th": null,
+    "sat_math_75th": null,
+    "act_composite_25th": null,
+    "act_composite_50th": null,
+    "act_composite_75th": null,
+    "notable_programs_or_features": []
+  }
+]
+```
+
+# Stanford
+```json
+UNIVERSITY_CATALOG = [
+  {
+    "name": "Stanford",
+    "location_city": "Unknown",
+    "location_state_or_region": "Unknown",
+    "institution_type": "4-year, Private not-for-profit",
+    "tuition_2024_2025": 61095,
+    "fees_2024_2025": 783,
+    "total_cost_on_campus_2024_2025": 61878,
+    "books_supplies_2024_2025": 825,
+    "application_fee_2024_2025": 90,
+    "in_state_tuition_2024_2025": null,
+    "out_of_state_tuition_2024_2025": null,
+    "undergraduate_enrollment": null,
+    "acceptance_rate": null,
+    "sat_ebrw_25th": null,
+    "sat_ebrw_50th": null,
+    "sat_ebrw_75th": null,
+    "sat_math_25th": null,
+    "sat_math_50th": null,
+    "sat_math_75th": null,
+    "act_composite_25th": null,
+    "act_composite_50th": null,
+    "act_composite_75th": null,
+    "notable_programs_or_features": []
+  }
+]
+```
+
+# Ucla
+```json
+UNIVERSITY_CATALOG = [
+  {
+    "name": "Ucla",
+    "location_city": "unknown",
+    "location_state_or_region": "unknown",
+    "institution_type": "4-year, Public",
+    "tuition_2024_2025": 15203,
+    "fees_2024_2025": 1714,
+    "total_cost_on_campus_2024_2025": 16917,
+    "books_supplies_2024_2025": unknown,
+    "application_fee_2024_2025": unknown,
+    "in_state_tuition_2024_2025": 12762,
+    "out_of_state_tuition_2024_2025": 27864,
+    "undergraduate_enrollment": unknown,
+    "acceptance_rate": unknown,
+    "sat_ebrw_25th": unknown,
+    "sat_ebrw_50th": unknown,
+    "sat_ebrw_75th": unknown,
+    "sat_math_25th": unknown,
+    "sat_math_50th": unknown,
+    "sat_math_75th": unknown,
+    "act_composite_25th": unknown,
+    "act_composite_50th": unknown,
+    "act_composite_75th": unknown,
+    "notable_programs_or_features": []
+  }
+]
+```
+
