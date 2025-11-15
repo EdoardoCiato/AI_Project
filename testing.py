@@ -1,78 +1,152 @@
+# load_documents_fixed.py
+from langchain_core.documents import Document
+import json
+from pathlib import Path
+from get_embedding_function import get_embedding_function
+from langchain_community.vectorstores import Chroma
+from ingest import add_to_chroma
 
-# from docling.document_converter import DocumentConverter
-# converter = DocumentConverter()
-# all_sheets_df = pd.DataFrame()
-# for sheet_name in xls.sheet_names:
-#     print(f"  - Reading sheet: {sheet_name}")
-#     df = pd.read_excel(xls, sheet_name=sheet_name, header=2)
-#     print(df)
-#     all_sheets_df = pd.concat([all_sheets_df, df], ignore_index=True)
+FILE_PATH = Path("./data/colleges_long.jsonl")
+CHROMA_PATH = "./chroma_db"
 
-# csv_file_path = "./csv_temp.csv"
-# all_sheets_df.to_csv(csv_file_path, index=False)
-# file_path = csv_file_path
-# print(f"Successfully converted Excel to temporary CSV: {file_path}")
-# result = converter.convert(file_path)
-# output_content = result.document.export_to_markdown()
+def _is_universityish(s: str) -> bool:
+    s = (s or "").lower()
+    return any(k in s for k in ["university", "college", "institute", "polytechnic"])
 
-# print(output_content)
+def _looks_like_header(s: str) -> bool:
+    s = (s or "").lower()
+    return any(k in s for k in ["academic year", "general information", "overview", "summary"])
 
-# import pandas as pd
-# from openpyxl import load_workbook
-# from json import dumps
-# 
-# sheets = []
-# for sheet_name in xls.sheet_names:
-# # Load Excel workbook
+def _normalize_mapping(r: dict) -> dict:
+    """
+    Fix records where 'university' contains a header (e.g., 'General information: Academic year 2024-25')
+    and 'category' actually contains the school name.
+    """
+    uni = str(r.get("university", "") or "")
+    cat = str(r.get("category", "") or "")
 
-#     # Choose a specific sheet
-#     workbook = load_workbook(filename="./compare-institutions-2025-11-14-5-42.xlsx")
-#     sheet = workbook[sheet_name]
-#     # Find the number of rows and columns in the sheet
-#     rows = sheet.max_row
-#     columns = sheet.max_column
+    if _looks_like_header(uni) and _is_universityish(cat):
+        # swap
+        uni, cat = cat, uni
 
-#     # List to store all rows as dictionaries
-#     lst = []
+    # Forward-fill 'variable' is not generally possible in JSONL alone,
+    # but keep whatever is present.
+    var = r.get("variable", None)
+    det = r.get("detail", None)
+    val = r.get("value", None)
+    sheet = r.get("sheet", None)
 
-#     # Iterate over rows and columns to extract data
-#     for i in range(1, rows):
-#         row = {}
-#         for j in range(1, columns):
-#             column_name = sheet.cell(row=1, column=j)
-#             row_data = sheet.cell(row=i+1, column=j)
+    return {
+        "university": str(uni),
+        "category": str(cat) if cat is not None else "",
+        "variable": "" if var is None else str(var),
+        "detail": "" if det in (None, float("nan")) else str(det),
+        "value": "" if val is None else str(val),
+        "sheet": "" if sheet is None else str(sheet),
+    }
 
-#             row.update(
-#                 {
-#                     column_name.value: row_data.value
-#                 }
-#             )
-#         lst.append(row)
-#     sheet.append(lst)
-# # Convert extracted data into JSON format
-# json_data = dumps(sheet)
+import re
 
-# # Print the JSON data
-# print(json_data)
+def _infer_variable(rr: dict) -> str:
+    """
+    Try to infer a useful variable name when it's blank.
+    - Heuristic: rows in 'Institution Characteristics' + 'General information' + 5–9 digit numeric value → 'UnitId'
+    - Otherwise return a generic label.
+    """
+    var = (rr.get("variable") or "").strip()
+    if var:
+        return var
+
+    sheet = (rr.get("sheet") or "").lower()
+    category = (rr.get("category") or "").lower()
+    value = str(rr.get("value") or "").strip()
+
+    # Looks like a UnitId (your sample case)
+
+    # Add other tiny heuristics here if you like, e.g.:
+    # if value.startswith("http"): return "Website"
+    # if value.endswith("%"): return "Percentage"
+
+    return "Unknown variable"
 
 
-# import pandas as pd
-# import json
-# json_list = []
-# # Convert Excel To Json With Python
-# xls = pd.ExcelFile("./compare-institutions-2025-11-14-5-42.xlsx")
-# for sheet_name in xls.sheet_names:
-#     df = pd.read_excel(xls, sheet_name=sheet_name, header=3)
-#     jdf = df.dropna(how="all")
-#     # JSON come lista di record: [{col1:..., col2:...}, ...]
-#     records = df.to_dict(orient="records")
-#     json_list.append({sheet_name: records})
+def load_documents(file_path=FILE_PATH):
+    docs = []
+    with open(file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            r = json.loads(line)
+            rr = _normalize_mapping(r)
 
-# json_output = json.dumps(json_list, indent=4)
-# print(json_output)
+            # NEW: ensure variable is never empty
+            variable = _infer_variable(rr)
 
-from excel2json import convert_from_file
+            # Build readable, self-contained embedding text
+            page_content = " | ".join([
+                f"University: {rr['university']}",
+                f"Sheet: {rr['sheet']}",
+                f"Category: {rr['category']}",
+                f"Variable: {variable}",
+                f"Detail: {rr['detail']}" if rr['detail'] else "Detail: (none)",
+                f"Value: {rr['value']}",
+            ])
 
-# Convert Excel file to JSON
-json_file = convert_from_file("compare-institutions-2025-11-14-5-42.xlsx")
-print(json_file)
+            metadata = {
+                "university": rr["university"],
+                "sheet": rr["sheet"],
+                "category": rr["category"],
+                "variable": variable,          # <- store the inferred variable
+                "detail": rr["detail"],
+                "value": rr["value"],
+            }
+
+            docs.append(Document(page_content=page_content, metadata=metadata))
+    return docs
+
+
+
+def calculate_chunk_ids(chunks: list[Document]) -> list[Document]:
+    """
+    Crea un ID unico per ogni chunk, tipo:
+    data/College Navigator - Harvard University.pdf:0:0
+    """
+    last_page_id = None
+    current_chunk_index = 0
+
+    for chunk in chunks:
+        source = chunk.metadata.get("source")
+        page = chunk.metadata.get("page")
+        current_page_id = f"{source}:{page}"
+
+        if current_page_id == last_page_id:
+            current_chunk_index += 1
+        else:
+            current_chunk_index = 0
+
+        chunk_id = f"{current_page_id}:{current_chunk_index}"
+        last_page_id = current_page_id
+
+        chunk.metadata["id"] = chunk_id
+
+    return chunks
+
+# --- verify ---
+if __name__ == "__main__":
+    docs = load_documents()
+    print(f"\n✅ Loaded {len(docs)} cleaned facts from {FILE_PATH.name}\n")
+
+    # Show 5 samples that should now have the correct university field
+    shown = 0
+    for d in docs:
+        if "Academic year" not in d.metadata["university"]:  # sanity condition
+            print("--------------------------------------------------")
+            print(f"University: {d.metadata.get('university')}")
+            print(f"Sheet: {d.metadata.get('sheet')}")
+            print(f"Category: {d.metadata.get('category')}")
+            print(f"Variable: {d.metadata.get('variable')}")
+            print(f"Value: {d.metadata.get('value')}")
+            print(f"Page Content: {d.page_content[:200]}...")
+            shown += 1
+            if shown >= 5:
+                break
+
+    add_to_chroma(docs)
