@@ -4,8 +4,9 @@ Simplified college recommender: Top 2 (Best fit + 1 good option)
 - No numeric scoring.
 - Picks two universities by context richness (how much indexed text we retrieve).
 - Locks the selected 'Best fit' header to avoid drift.
-- Bullets are deterministically extracted from retrieved text (no hallucinations).
-- LLM is used only for the short "why this fits" paragraph, with guards to avoid invented numbers.
+- Personal, student-facing tone ("you/your"), never "I/we".
+- Adds a short 'More reasons for you' list only for the Best fit.
+- Grounding guards: no numbers unless found; no setting/ratio claims unless found.
 
 Usage:
   python recommendation.py "I want an urban campus in the Northeast, strong CS, small classes, housing, scholarships, ~60k total, club rowing."
@@ -169,7 +170,7 @@ def retrieve_context_for_uni(db: Chroma, uni: str, prefs: Dict, k: int = 16) -> 
             parts.append(txt)
     return "\n\n---\n\n".join(parts)
 
-# ====== Deterministic extraction (bullets from text only) ======
+# ====== Minimal extraction (to guard numbers/claims) ======
 SETTING_WORDS = ["urban", "suburban", "rural", "college town", "town"]
 
 def _find_first_case_insensitive(text: str, words: List[str]) -> str | None:
@@ -199,6 +200,7 @@ def _clean_snippet(s: str | None, maxlen: int = 180) -> str | None:
 def extract_fields(ctx: str) -> dict:
     """
     Very literal extraction—only returns something if we can see it in the context text.
+    Used here mainly to detect presence of budget/aid facts and a couple of specifics.
     """
     info = {
         "budget_aid": None,
@@ -211,7 +213,7 @@ def extract_fields(ctx: str) -> dict:
     if not ctx:
         return info
 
-    # Budget & aid
+    # Budget & aid (presence used to allow numbers in prose)
     m = re.search(r"(financial aid|scholarship|grant|no[-\s]?loan|meets 100%|need[-\s]?blind|merit)", ctx, re.I)
     money = re.search(r"\$\s?\d[\d,]*(?:\.\d+)?\s*(?:per year|/year|annual|tuition|cost|coa|cost of attendance)?", ctx, re.I)
     if m or money:
@@ -220,30 +222,30 @@ def extract_fields(ctx: str) -> dict:
         span = ctx[max(0, start-80): min(len(ctx), end+160)]
         info["budget_aid"] = _clean_snippet(" ".join(span.split()))
 
-    # Setting
+    # Setting (optional)
     w = _find_first_case_insensitive(ctx, SETTING_WORDS)
     if w:
         info["setting"] = w
 
-    # Academics (CS/DS)
-    m = re.search(r"(computer science|data science|statistics|cs department|school of engineering)", ctx, re.I)
+    # Academics (broader: CS/DS and life sciences)
+    m = re.search(r"(computer science|data science|statistics|cs department|school of engineering|neuroscience|biology)", ctx, re.I)
     if m:
         span = ctx[max(0, m.start()-60): min(len(ctx), m.end()+120)]
         info["academics"] = _clean_snippet(" ".join(span.split()))
 
-    # Student–faculty ratio / class size
+    # Student–faculty ratio / class size (optional)
     m = re.search(r"(\b\d{1,2}\s*:\s*\d{1,2}\b|\bstudent[-\s]?faculty ratio\b|class size)", ctx, re.I)
     if m:
         span = ctx[max(0, m.start()-30): min(len(ctx), m.end()+90)]
         info["ratio"] = _clean_snippet(" ".join(span.split()), 120)
 
-    # Housing
+    # Housing (optional)
     m = re.search(r"(on[-\s]?campus housing|residential college|residence hall|dorm|guaranteed housing)", ctx, re.I)
     if m:
         span = ctx[max(0, m.start()-40): min(len(ctx), m.end()+140)]
         info["housing"] = _clean_snippet(" ".join(span.split()))
 
-    # Athletics / clubs (prefer rowing if present)
+    # Athletics / clubs (optional, prefer rowing if present)
     m_row = re.search(r"(rowing|crew)", ctx, re.I)
     if m_row:
         span = ctx[max(0, m_row.start()-40): min(len(ctx), m_row.end()+120)]
@@ -290,6 +292,78 @@ def _strip_numbers_if_no_budget(text: str, has_budget: bool) -> str:
         return text
     return re.sub(r'(\$?\d[\d,]*(\.\d+)?\s*(k|K)?(%|\b))|(\$+\s?\d[\d,]*)', ' ', text)
 
+def _force_second_person(s: str) -> str:
+    """Convert 'I/I'm' phrasing to 'you/your' if the model slips."""
+    if not s:
+        return s
+    # handle common cases
+    s = re.sub(r"\bI am\b", "You are", s)
+    s = re.sub(r"\bI'm\b", "You're", s)
+    s = re.sub(r"\bI can\b", "You can", s)
+    s = re.sub(r"\bI will\b", "You will", s)
+    s = re.sub(r"\bI would\b", "You would", s)
+    s = re.sub(r"\bI\b", "You", s)
+    s = re.sub(r"\bmy\b", "your", s)
+    me_start = re.match(r"^\s*(?:I|I'm|I am)\b.*?:\s*", s)
+    if me_start:
+        s = s[me_start.end():]
+    return s.strip()
+
+def _line_mentions_setting(line: str) -> bool:
+    t = line.lower()
+    return any(w in t for w in SETTING_WORDS)
+
+def _line_mentions_ratio(line: str) -> bool:
+    t = line.lower()
+    return ("ratio" in t) or bool(re.search(r"\b\d{1,2}\s*:\s*\d{1,2}\b", t))
+
+def _line_has_numbers(line: str) -> bool:
+    return bool(re.search(r"(\$?\d[\d,]*|\b\d+%|\b\d+\b)", line))
+
+def _format_reason_bullets(text: str, fields: dict, max_items: int = 4) -> List[str]:
+    """
+    Take the LLM 'reasons' output (bulleted or lines), filter unsupported claims,
+    force second-person, and format as clean '- reason' bullets (max N).
+    """
+    if not text:
+        return []
+    # Split into lines; drop headers/preambles/numbered list markers
+    lines = [ln.strip() for ln in text.strip().splitlines()]
+    cleaned = []
+    for ln in lines:
+        if not ln:
+            continue
+        if re.search(r"^here (are|is)\b", ln.lower()):
+            continue
+        ln = re.sub(r"^[\-\*\u2022]\s*", "", ln)  # remove leading bullet
+        ln = re.sub(r"^\d+[\).\s-]*", "", ln)     # remove numbering
+        ln = ln.strip()
+        if not ln:
+            continue
+        cleaned.append(ln)
+
+    # Filter: no setting/ratio if not found in extraction; no numbers if no budget found
+    filtered = []
+    for ln in cleaned:
+        if fields.get("setting") is None and _line_mentions_setting(ln):
+            continue
+        if fields.get("ratio") is None and _line_mentions_ratio(ln):
+            continue
+        if not fields.get("budget_aid") and _line_has_numbers(ln):
+            continue
+        filtered.append(_force_second_person(ln))
+
+    # Cap each to ~120 chars and build bullets
+    bullets = []
+    for ln in filtered:
+        ln = re.sub(r'\s+', ' ', ln)
+        if len(ln) > 120:
+            ln = ln[:117].rstrip(",.;: ") + "…"
+        bullets.append(f"- {ln}")
+        if len(bullets) >= max_items:
+            break
+    return bullets
+
 # ====== MAIN RECOMMENDER ======
 def recommend(freetext: str) -> str:
     prefs = parse_preferences(freetext)
@@ -311,56 +385,93 @@ def recommend(freetext: str) -> str:
     else:
         c1_uni, c1_ctx = ("—", "")
 
-    # Deterministic extraction for bullets
+    # Minimal extraction (we mainly use budget presence to guard numbers/claims)
     best_fields = extract_fields(best_ctx)
     c1_fields   = extract_fields(c1_ctx)
 
-    # LLM writes only the short "why fit" paragraph, grounded by context
+    # LLM prompts (personal, grounded, second-person)
     WHY_PROMPT = ChatPromptTemplate.from_template(
-        "You are a college advisor. In 2–3 sentences, explain why {uni} fits the student "
-        "based ONLY on this context. If something is missing, explicitly say 'not found'. "
-        "Avoid specific numbers or income thresholds unless they appear verbatim in the context.\n\n"
-        "Context:\n{ctx}\n"
+        "You are a college-matching advisor speaking directly to a high school student.\n"
+        "Write 2–3 sentences (≤60 words) explaining **why {uni} fits *you*** given your preferences.\n"
+        "Use second person ('you/your'). Do **not** use 'I' or 'we'.\n"
+        "Be concrete: call out majors, housing, campus setting, scholarships, or clubs that match what *you* asked for.\n"
+        "If something you want isn’t in the context, say 'not found' rather than guessing.\n\n"
+        "Your preferences:\n{prefs}\n\n"
+        "Context snippets for {uni}:\n{ctx}\n\n"
+        "Rules:\n"
+        "- Use only details found in the context.\n"
+        "- Don’t mention acceptance rates, rankings, or generic 'prestige'.\n"
+        "- Focus on alignment: academics, financial aid, setting, housing, sports/clubs.\n"
+        "- Keep it factual, warm, and concise.\n"
     )
+
+    # Reasons (Best fit ONLY): short lines, second person, no numbering or headers
+    REASONS_PROMPT = ChatPromptTemplate.from_template(
+        "List 2–4 SHORT reasons (one per line) that show how {uni} matches the student's preferences.\n"
+        "Each reason must be ≤16 words, factual, second person ('you/your'), and grounded in the context.\n"
+        "Output only the reasons (no numbering, no headers). Avoid acceptance-rate/rankings. Use numbers only if they appear verbatim.\n\n"
+        "Student preferences:\n{prefs}\n\n"
+        "Context snippets for {uni}:\n{ctx}\n"
+    )
+
     llm = OllamaLLM(model=LLM_MODEL, temperature=0.2)
-    best_why = llm.invoke(WHY_PROMPT.format(uni=best_uni, ctx=_trim(best_ctx, 3500)))
-    c1_why   = llm.invoke(WHY_PROMPT.format(uni=c1_uni,   ctx=_trim(c1_ctx,   3500))) if c1_uni != "—" else ""
+    best_why = llm.invoke(
+        WHY_PROMPT.format(
+            uni=best_uni,
+            prefs=json.dumps(prefs, ensure_ascii=False),
+            ctx=_trim(best_ctx, 3500),
+        )
+    )
+    # Reasons only for Best fit
+    best_reasons_raw = llm.invoke(
+        REASONS_PROMPT.format(
+            uni=best_uni,
+            prefs=json.dumps(prefs, ensure_ascii=False),
+            ctx=_trim(best_ctx, 3500),
+        )
+    )
+    c1_why = (
+        llm.invoke(
+            WHY_PROMPT.format(
+                uni=c1_uni,
+                prefs=json.dumps(prefs, ensure_ascii=False),
+                ctx=_trim(c1_ctx, 3500),
+            )
+        )
+        if c1_uni != "—" else ""
+    )
 
-    # Guard: strip precise numbers if we found no budget/aid snippet
-    best_why = _strip_numbers_if_no_budget(best_why, bool(best_fields["budget_aid"])).strip()
+    # Guards: strip precise numbers if we found no budget/aid snippet, and force second-person
+    best_why = _force_second_person(_strip_numbers_if_no_budget(best_why, bool(best_fields["budget_aid"]))).strip()
     if c1_why:
-        c1_why = _strip_numbers_if_no_budget(c1_why, bool(c1_fields["budget_aid"])).strip()
+        c1_why = _force_second_person(_strip_numbers_if_no_budget(c1_why, bool(c1_fields["budget_aid"]))).strip()
+    best_reason_bullets = _format_reason_bullets(best_reasons_raw, best_fields, max_items=4)
 
-    def _bullet(v, fallback="not found"):
-        return v if (v and str(v).strip()) else fallback
-
-    # Build markdown deterministically
+    # Build succinct, personal markdown
     md = []
     md.append(f"# Best fit: {best_uni}")
-    md.append("**Why this university fits (2–3 sentences):**")
+    md.append("**Why this fits *you*:**")
     md.append(best_why)
+    if best_reason_bullets:
+        md.append("")
+        md.append("**More reasons for you:**")
+        md.extend(best_reason_bullets)
+
     md.append("")
-    md.append("**Highlights from the indexed info:**")
-    md.append(f"- **Budget & aid:** {_bullet(_clean_snippet(best_fields['budget_aid']))}")
-    md.append(f"- **Setting & campus vibe:** {_bullet(_clean_snippet(best_fields['setting']))}")
-    md.append(f"- **Academics/programs:** {_bullet(_clean_snippet(best_fields['academics']))}")
-    md.append(f"- **Class size / student–faculty ratio:** {_bullet(_clean_snippet(best_fields['ratio']))}")
-    md.append(f"- **Housing/residential life:** {_bullet(_clean_snippet(best_fields['housing']))}")
-    md.append(f"- **Athletics & clubs (e.g., rowing):** {_bullet(_clean_snippet(best_fields['athletics']))}")
-    md.append("")
-    md.append("**Potential trade-offs / unknowns:**")
+    md.append("**What I couldn’t verify yet:**")
     missing = [k for k,v in best_fields.items() if v is None]
     if missing:
         for k in missing[:3]:
-            md.append(f"* {k.replace('_',' ')} not explicitly found in the brochure text.")
+            md.append(f"* {k.replace('_',' ')} — not found in the brochure excerpts.")
     else:
-        md.append("* none noted in the provided excerpts.")
+        md.append("* nothing major missing from the excerpts.")
+
     md.append("")
     md.append("# Other good option")
     if c1_uni != "—":
-        md.append(f"1) **{c1_uni}** — {c1_why if c1_why else 'Another promising option based on the available context.'}")
+        md.append(f"**Why {c1_uni} could fit *you*:** {c1_why if c1_why else 'Promising match based on brochure excerpts.'}")
     else:
-        md.append("1) **—** — not enough context for a second option.")
+        md.append("*(no second option found in current corpus)*")
 
     return _enforce_consistency("\n".join(md), best_uni)
 
