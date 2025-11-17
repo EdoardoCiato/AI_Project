@@ -1,0 +1,7 @@
+question 1:
+"I’m looking for a small, suburban college town in the Northeast with strong computer science and data science programs. I’d like on-campus housing, scholarships or grants, and a strong sense of community—rowing or other club sports would be a bonus."
+Expected recommendation: Princeton
+
+Question 2: 
+"“I want a place that encourages academic exploration before locking a program, with faculty + peer advising and student-run groups in tech/entrepreneurship. Urban Northeast, on-campus living preferred.”"
+Expected recommendation: Brown
