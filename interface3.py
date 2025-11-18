@@ -239,8 +239,8 @@ if st.session_state.end_chat:
     end_chat_screen()
 
 # --- LANDING (mode chooser) ---
+# --- LANDING (mode chooser) ---
 if st.session_state.mode is None:
-    # Centered UNISCOUT branding + description
     st.markdown(
         """
         <div class="centered-landing">
@@ -253,26 +253,47 @@ if st.session_state.mode is None:
 
     with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
         st.markdown("Hi! I'm **UniScout** 🤖. What would you like to do?")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("🔍 Investigate one university"):
-                add_mode_separator("learn")
-                st.session_state.mode = "learn"
-                user_say("I want to investigate one university.")
-                st.experimental_rerun()
-        with col2:
-            if st.button("📊 Compare universities"):
-                add_mode_separator("compare")
-                st.session_state.mode = "compare"
-                user_say("I want to compare universities.")
-                st.experimental_rerun()
-        with col3:
-            if st.button("🎯 Recommend me a university"):
-                add_mode_separator("recommend")
-                st.session_state.mode = "recommend"
-                user_say("Please recommend a university for me.")
-                st.experimental_rerun()
+        col1, col2, col3 = st.columns(3, gap="large")
+        st.markdown("""
+            <style>
+            div[data-testid="column"] div.stButton > button {
+                width: 100%;
+                height: 4.5rem;
+                white-space: normal;
+                line-height: 1.2;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+    with col1:
+        if st.button("🔍 Investigate one university", use_container_width=True):
+            add_mode_separator("learn")
+            st.session_state.mode = "learn"
+            user_say("I want to investigate one university.")
+            st.experimental_rerun()  # or st.rerun()
+
+    with col2:
+        if st.button("📊 Compare universities", use_container_width=True):
+            add_mode_separator("compare")
+            st.session_state.mode = "compare"
+            user_say("I want to compare universities.")
+            st.experimental_rerun()
+
+    with col3:
+        if st.button("🎯 Recommend me a university", use_container_width=True):
+            add_mode_separator("recommend")
+            st.session_state.mode = "recommend"
+            user_say("Please recommend a university for me.")
+            st.experimental_rerun()
+
+    # ⬇️ keep the stop *inside* the landing branch
     st.stop()
+
+
 
 # --- CHAT HISTORY (inside chat-style box) ---
 st.markdown('<div class="stChat">', unsafe_allow_html=True)
@@ -387,18 +408,22 @@ elif st.session_state.mode == "recommend":
 if st.session_state.awaiting_next:
     with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
         st.markdown("Would you like to do anything else?")
-        col1, col2, col3 = st.columns(3)
+
+        # equal-width columns; tweak gap to taste ("small" | "medium" | "large")
+        col1, col2, col3 = st.columns(3, gap="large")
+
         with col1:
-            if st.button("Ask another"):
+            if st.button("Ask another", use_container_width=True):
                 st.session_state.awaiting_next = False
                 st.experimental_rerun()
+
         with col2:
-            if st.button("Switch mode"):
-                # intentionally NO separator when returning to the landing page
+            if st.button("Switch mode", use_container_width=True):
                 st.session_state.mode = None
                 st.session_state.awaiting_next = False
                 st.experimental_rerun()
+
         with col3:
-            if st.button("Done ✅"):
+            if st.button("Done ✅", use_container_width=True):
                 st.session_state.end_chat = True
                 st.experimental_rerun()
