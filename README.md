@@ -94,7 +94,7 @@ streamlit run interface3.py
 | **sample_question_recommendation.txt** | Contains example user queries for the different modes. Used for testing and demonstration.                                                                |
 
 ## 5. File structure 
-
+```bash
 AI_Project/
 │
 ├── data/                      # PDF brochures
@@ -106,6 +106,7 @@ AI_Project/
 ├── get_embedding_function.py  # Embedding setup
 ├── comparing.py               # Similarity and comparison
 └── sample_question_recommendation.txt  # Example inputs
+```
 
 ## 6. Credits and Acknowledgments 
 Developed by Edoardo Ciato, Alejandra Rabattu, Juan Perez, Diego Martinez, and Sibylle Radix for AI-MACHINE LEARNING FOUNDATIONS, using Ollama, LangChain, and Streamlit.
