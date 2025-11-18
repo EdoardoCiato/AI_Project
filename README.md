@@ -55,6 +55,7 @@ The RAG application relies on these two models. Run these commands in a separate
 ```bash
 ollama pull mxbai-embed-large
 ollama pull gemma:7b
+ollama pull llama3.1:latest
 ```
 
  ## 3. Running the UniScout Assistant
