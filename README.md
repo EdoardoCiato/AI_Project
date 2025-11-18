@@ -28,7 +28,7 @@ source venv/bin/activate  # macOS/Linux
 # .\venv\Scripts\activate # Windows (PowerShell)
 
 # 3. Install all required packages
-pip install streamlit \
+pip install streamlit==1.32.0 \
             pypdf \
             langchain-core \
             langchain-community \
