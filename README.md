@@ -93,4 +93,19 @@ streamlit run interface3.py
 | **interface3.py**                      | The main Streamlit web application file. It runs the interactive interface where users can type queries, receive results, and view recommendations in real time.                                                                                    |
 | **sample_question_recommendation.txt** | Contains example user queries for the different modes. Used for testing and demonstration.                                                                |
 
-      
+## 5. File structure 
+
+AI_Project/
+│
+├── data/                      # PDF brochures
+├── chroma/                    # Vector database storage
+├── interface3.py              # Streamlit front-end
+├── populate_database.py       # Embedding + database population
+├── query_data.py              # Data retrieval logic
+├── final_recomm.py            # Recommendation generation
+├── get_embedding_function.py  # Embedding setup
+├── comparing.py               # Similarity and comparison
+└── sample_question_recommendation.txt  # Example inputs
+
+## 6. Credits and Acknowledgments 
+Developed by Edoardo Ciato, Alejandra Rabattu, Juan Perez, Diego Martinez, and Sibylle Radix for AI-MACHINE LEARNING FOUNDATIONS, using Ollama, LangChain, and Streamlit.
