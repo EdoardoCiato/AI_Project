@@ -8,7 +8,7 @@ from query_data import query_rag
 # ✅ compare flow
 from comparing import compare_universities
 # ✅ recommendation flow (returns (rec_text, top))
-from recommendation import recommend as recommend_universities
+from final_recomm import recommend as recommend_universities
 
 # --- PAGE SETUP (must come first) ---
 st.set_page_config(page_title="Uni Assistant", page_icon=":university:", layout="centered")
@@ -204,6 +204,10 @@ def render_comparison(unis_dict):
         st.write("\n".join([f"- {b}" for b in bullets]))
         st.write("")  # spacer
 
+def render_recommendation_markdown(md: str):
+    st.markdown(md if md else "⚠️ No recommendation text was returned.")
+
+
 def render_recommendations_struct(rec_text, top):
     """
     rec_text: advisor paragraph (markdown ok)
@@ -248,7 +252,7 @@ if st.session_state.mode is None:
     )
 
     with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
-        st.markdown("Hi! I'm **Uni Assistant** 🤖. What would you like to do?")
+        st.markdown("Hi! I'm **UniScout** 🤖. What would you like to do?")
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("🔍 Investigate one university"):
@@ -280,7 +284,7 @@ if st.session_state.mode == "learn":
     # Only show the input when we're NOT in the "what else?" stage
     if not st.session_state.awaiting_next:
         with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
-            st.markdown("Ask me a question about one university (e.g., *What is Harvard tuition for 2024–2025?*)")
+            st.markdown("Ask me a question about one university (e.g., *What are some traditions at Harvard?*)")
         question = st.chat_input("Type your question about a university…")
         if question:
             user_say(question)
@@ -369,24 +373,12 @@ elif st.session_state.mode == "recommend":
             with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
                 with st.spinner("Finding good matches…"):
                     try:
-                        # recommendation.recommend returns (rec_text, top)
-                        rec_text, top = recommend_universities(prefs.strip(), top_k=5)
+                        md = recommend_universities(prefs.strip())   # ← single markdown string
                     except Exception as e:
-                        rec_text, top = (f"⚠️ Error: {e}", [])
+                        md = f"⚠️ Error: {e}"
 
-                    if not rec_text and not top:
-                        rec_text = "⚠️ No output was returned."
-
-                    render_recommendations_struct(rec_text, top)
-
-                    # Save a compact version to history
-                    summary_lines = [rec_text, "", "**Top matches**"]
-                    for u, s, w in top:
-                        one = f"- **{u}** — {round(float(s),1)}/100"
-                        if w:
-                            one += f": {w}"
-                        summary_lines.append(one)
-                    assistant_say("\n".join(summary_lines))
+                    render_recommendation_markdown(md)
+                    assistant_say(md)  # save markdown directly into chat history
 
             st.session_state.awaiting_next = True
             st.experimental_rerun()
