@@ -79,7 +79,14 @@ Run the Streamlit application:
 
 ```bash
 streamlit run interface3.py
-```    
+```
+IMPORTANT: for a better visualization of the interface, the user needs to ensure it is in light mode. Here are the steps to ensure the light mode appearance is on:
+-Launch the interface 
+-Go to the three dots at the top right
+-Click on settings
+-Click the drop down of "User system setting"
+-Select "Light"
+
 
 ## 4. Description of the files 
 
