@@ -1,9 +1,9 @@
 # populate_database.py
 
 import os
-from langchain_community.document_loaders import PyPDFDirectoryLoader #to upload all the PDFs from a directory
-from langchain_text_splitters import RecursiveCharacterTextSplitter #to split the documents into chunks
-from langchain_core.documents import Document #to represent documents with metadata
+from langchain_community.document_loaders import PyPDFDirectoryLoader  # Upload all PDFs from a directory
+from langchain_text_splitters import RecursiveCharacterTextSplitter  # Split documents into chunks
+from langchain_core.documents import Document  # Represent documents with metadata
 from langchain_community.vectorstores import Chroma
 
 from get_embedding_function import get_embedding_function
@@ -15,17 +15,17 @@ def infer_university(metadata: dict) -> str:
     title = (metadata.get("title") or "").lower()
     source = (metadata.get("source") or "").lower()
 
-    # Esempi di title tipo: "College Navigator - Harvard University"
-    if "college navigator" in title and "-" in title:
-        # prendi tutto dopo il trattino
+    # Example titles: "Brochure - Harvard University"
+    if "brochure " in title and "-" in title:
+        # Take everything after the dash
         after_dash = title.split("-", 1)[1].strip()
         return after_dash.title()
 
-    # fallback: usa il nome del file (senza estensione)
+    # Fallback: use the filename (without extension)
     if source:
         filename = os.path.basename(source)
         name_no_ext, _ = os.path.splitext(filename)
-        # "College Navigator - Stanford" -> prendo dopo il trattino
+        # Example: "Brochure - Brown" -> take text after the dash
         if "-" in name_no_ext:
             after_dash = name_no_ext.split("-", 1)[1].strip()
             return after_dash.title()
@@ -35,34 +35,36 @@ def infer_university(metadata: dict) -> str:
 
 
 def load_documents():
+    """Load all PDFs from the data directory and assign university metadata."""
     loader = PyPDFDirectoryLoader(DATA_PATH)
     docs = loader.load()
 
     for doc in docs:
         uni = infer_university(doc.metadata)
         doc.metadata["university"] = uni
-        # opzionale: print di debug alla prima esecuzione
+        # Optional: print for debugging
         # print(doc.metadata["source"], "->", uni)
 
     return docs
 
 
 def split_documents(documents: list[Document]) -> list[Document]:
-    """Splitta i documenti in chunk sovrapposti."""
+    """Split documents into overlapping chunks for embedding."""
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
         chunk_overlap=150,
-        length_function=len, #measurement done by counting the characters
+        length_function=len,  # Character-based length measurement
         separators=["\n\n", "\n", " ", ""],
-        is_separator_regex=False,)
+        is_separator_regex=False,
+    )
     chunks = text_splitter.split_documents(documents)
-    print(f"🔹 Chunk creati: {len(chunks)}")
+    print(f" Chunks created: {len(chunks)}")
     return chunks
 
 
 def calculate_chunk_ids(chunks: list[Document]) -> list[Document]:
     """
-    Crea un ID unico per ogni chunk, tipo:
+    Create a unique ID for each chunk, like:
     data/College Navigator - Harvard University.pdf:0:0
     """
     last_page_id = None
@@ -87,7 +89,7 @@ def calculate_chunk_ids(chunks: list[Document]) -> list[Document]:
 
 
 def add_to_chroma(chunks: list[Document]) -> None:
-    """Aggiunge solo i nuovi chunk al database Chroma persistente."""
+    """Add only new chunks to the persistent Chroma database."""
     embedding_function = get_embedding_function()
 
     db = Chroma(
@@ -95,25 +97,25 @@ def add_to_chroma(chunks: list[Document]) -> None:
         embedding_function=embedding_function,
     )
 
-    # aggiunge gli ID ai chunk
+    # Add IDs to chunks
     chunks_with_ids = calculate_chunk_ids(chunks)
 
-    # recupera gli ID già presenti nel DB
-    existing_items = db.get(include=[])  # gli ids sono sempre inclusi
+    # Retrieve IDs already present in the DB
+    existing_items = db.get(include=[])  # IDs are always included
     existing_ids = set(existing_items["ids"])
-    print(f"📚 Documenti già presenti nel DB: {len(existing_ids)}")
+    print(f" Documents already in the database: {len(existing_ids)}")
 
-    # filtra solo i nuovi chunk
+    # Keep only new chunks
     new_chunks = [ch for ch in chunks_with_ids if ch.metadata["id"] not in existing_ids]
 
     if new_chunks:
-        print(f"👉 Aggiungo nuovi documenti: {len(new_chunks)}")
+        print(f"👉 Adding new documents: {len(new_chunks)}")
         new_chunk_ids = [ch.metadata["id"] for ch in new_chunks]
         db.add_documents(new_chunks, ids=new_chunk_ids)
         db.persist()
-        print("✅ DB Chroma aggiornato e salvato.")
+        print(" Chroma database updated and saved.")
     else:
-        print("✅ Nessun nuovo documento da aggiungere.")
+        print(" No new documents to add.")
 
 
 def main():
