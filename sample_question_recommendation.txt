@@ -1,8 +1,30 @@
+Investigate a University
+
+* How flexible is the curriculum — can students design their own courses or concentrations?
+* Tell me more about the book collection at Brown and the library system?
+* What types of student organizations and extracurricular clubs are available?
+* What kinds of research opportunities are available to undergraduates? 
+* What kind of academic advising or mentoring does the school provide for first-year students?
+* Are there opportunities to study abroad or participate in exchange programs?
+* What is the food like on campus — are there dining halls, cafés, or themed meal options?
+* What are some traditions or unique social events on campus?
+* How does the university promote student health and well-being?
+* What types of student organizations and extracurricular clubs are available?
+
+
+Compare Universities 
+* How do the dining options and campus food culture compare?
+* How do the locations and the campus vibe differ? 
+* Which university has a stronger sense of tradition or community?
+* Which university offers more flexibility in choosing majors or designing independent study projects?
+* Are there specific programs or services for students with disabilities? Brown and Princeton 
+
+
+Recommend me a university 
 question 1:
 "I’m looking for a small, suburban college town in the Northeast with strong computer science and data science programs. I’d like on-campus housing, scholarships or grants, and a strong sense of community—rowing or other club sports would be a bonus."
 Expected recommendation: Princeton
 
 Question 2: 
-"“I want a place that encourages academic exploration before locking a program, with faculty + peer advising and student-run groups in tech/entrepreneurship. Urban Northeast, on-campus living preferred.”"
+"I want a place that encourages academic exploration before locking a program, with faculty + peer advising and student-run groups in tech/entrepreneurship. Urban Northeast, on-campus living preferred."
 Expected recommendation: Brown
-
