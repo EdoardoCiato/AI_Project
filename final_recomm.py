@@ -10,6 +10,9 @@ Simplified college recommender: Top 2 (Best fit + 1 good option)
 Usage:
   python recommendation.py "I want an urban campus in the Northeast, strong CS, small classes, housing, scholarships, ~60k total, club rowing."
 """
+#  CLI tool that recommends two universities based on retrieved brochure context.
+#  Emphasizes grounded outputs (no hallucinated numbers/settings), second-person tone,
+#  and a “Best fit” + “Other good option” structure.
 
 from __future__ import annotations
 import argparse
@@ -18,8 +21,8 @@ import re
 from typing import Dict, List, Tuple
 
 # === Non-deprecated packages ===
-#from langchain_chroma import Chroma
-#from langchain_ollama import OllamaLLM, OllamaEmbeddings
+# from langchain_chroma import Chroma
+# from langchain_ollama import OllamaLLM, OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_community.llms import Ollama
 from langchain_community.embeddings import OllamaEmbeddings
@@ -29,10 +32,12 @@ from langchain_core.documents import Document  # typing clarity
 # ====== CONFIG ======
 CHROMA_PATH = "./chroma_db"
 LLM_MODEL = "llama3.1:latest"   # ollama pull llama3.1:latest
+#  Points at a local Chroma DB and an Ollama-served LLM.
 
 # ---- Embedding helper with robust fallback ----
 def _fallback_embedding_function():
     """Prefer Ollama embeddings; fallback to sentence-transformers if needed."""
+    #  Tries Ollama embeddings first, then HuggingFace as a local fallback.
     try:
         return OllamaEmbeddings(model="nomic-embed-text")  # ollama pull nomic-embed-text
     except Exception:
@@ -46,6 +51,7 @@ def _fallback_embedding_function():
                 "- `sentence-transformers` for a local HF model."
             ) from e
 
+#  Prefer a project-provided embedding function if available; else use fallback.
 try:
     from get_embedding_function import get_embedding_function as _ext_get_emb
     def get_embedding_function():
@@ -55,6 +61,7 @@ except Exception:
         return _fallback_embedding_function()
 
 # ====== PREFERENCES PARSER ======
+#  Controlled vocabularies for simple keyword extraction from user preferences.
 SPORT_WORDS = [
     "rowing","crew","basketball","soccer","football","baseball","softball",
     "swimming","tennis","track","cross country","volleyball","hockey",
@@ -69,6 +76,7 @@ DISCIPLINE_WORDS = [
 ]
 
 def _regex_number(text: str):
+    #  Extracts a single numeric value (plain or with “k” or thousand separators); returns float or None.
     m = re.search(r'(\$?\s*\d{1,3}(?:[,\s]\d{3})+|\$?\s*\d+(?:\.\d+)?\s*[kK]?)', text)
     if not m:
         return None
@@ -78,6 +86,7 @@ def _regex_number(text: str):
     return float(raw.replace(",", ""))
 
 def _regex_list(text: str, vocab: List[str]) -> List[str]:
+    #  Finds unique vocabulary entries present in the text (case-insensitive, whole-word).
     found = []
     t = text.lower()
     for w in vocab:
@@ -87,6 +96,7 @@ def _regex_list(text: str, vocab: List[str]) -> List[str]:
 
 def parse_preferences(freetext: str) -> Dict:
     """Heuristic-only parse; fast and deterministic."""
+    #  Produces a compact preference dictionary from user prose (budget, location, interests).
     return {
         "budget_cap": _regex_number(freetext),
         "budget_mode": "total" if re.search(r"total|coa|cost of attendance|room\s*and\s*board", freetext, re.I) else "tuition",
@@ -109,6 +119,7 @@ def list_universities(db: Chroma) -> List[str]:
     Collect unique 'university' names stored in metadatas (handles different key casings).
     Works with langchain_chroma backend.
     """
+    #  Scans all metadata entries and returns distinct, non-trivial university names.
     items = db.get(include=["metadatas"])
     unis = set()
     for meta in items.get("metadatas", []):
@@ -120,6 +131,7 @@ def list_universities(db: Chroma) -> List[str]:
     return sorted(unis)
 
 # ====== CONTEXT RETRIEVAL ======
+#  Seed query prioritizing finance/aid, academics, class size, and athletics, plus user extras.
 RETRIEVAL_QUERY_TEMPLATE = (
     "2024 2025 tuition fees cost of attendance room board housing scholarships financial aid "
     "undergraduate majors enrollments acceptance rate student-faculty ratio class size athletics clubs sports "
@@ -128,6 +140,7 @@ RETRIEVAL_QUERY_TEMPLATE = (
 
 def _similarity_search_with_filter(db: Chroma, q: str, uni: str, k: int) -> List[Tuple[Document, float]]:
     """Try multiple metadata keys for robustness."""
+    #  Some corpora store university under different keys; iterate through common ones.
     for key in ("university", "University", "category"):
         try:
             hits = db.similarity_search_with_score(q, k=max(k, 30), filter={key: uni})
@@ -138,6 +151,7 @@ def _similarity_search_with_filter(db: Chroma, q: str, uni: str, k: int) -> List
     return []
 
 def retrieve_context_for_uni(db: Chroma, uni: str, prefs: Dict, k: int = 16) -> str:
+    #  Retrieves up to k chunks strictly tagged to the university; otherwise broadens and re-filters.
     extras = " ".join(prefs.get("discipline_keywords") or []) + " " + " ".join(prefs.get("sports_interest") or [])
     q = RETRIEVAL_QUERY_TEMPLATE.format(extras=extras).strip()
 
@@ -176,6 +190,7 @@ def retrieve_context_for_uni(db: Chroma, uni: str, prefs: Dict, k: int = 16) -> 
 SETTING_WORDS = ["urban", "suburban", "rural", "college town", "town"]
 
 def _find_first_case_insensitive(text: str, words: List[str]) -> str | None:
+    #  Returns the first matching word (case-insensitive) present in text.
     t = text.lower()
     for w in words:
         if w in t:
@@ -183,6 +198,7 @@ def _find_first_case_insensitive(text: str, words: List[str]) -> str | None:
     return None
 
 def _clean_snippet(s: str | None, maxlen: int = 180) -> str | None:
+    #  Normalize whitespace, strip long numeric runs, and smart-truncate to ~maxlen chars.
     if not s:
         return None
     s = re.sub(r'\s+', ' ', s).strip()
@@ -204,6 +220,7 @@ def extract_fields(ctx: str) -> dict:
     Very literal extraction—only returns something if we can see it in the context text.
     Used here mainly to detect presence of budget/aid facts and a couple of specifics.
     """
+    #  Extracts shallow signals to decide what claims are allowed (budget/aid, setting, ratio, etc.).
     info = {
         "budget_aid": None,
         "setting": None,
@@ -262,10 +279,12 @@ def extract_fields(ctx: str) -> dict:
 
 # ====== Helpers ======
 def _trim(txt: str, limit: int = 4000) -> str:
+    #  Hard cap to keep prompts under model/context limits.
     return (txt or "")[:limit]
 
 def _pick_top2_by_context(db: Chroma, prefs: Dict, all_unis: List[str]) -> List[Tuple[str, str]]:
     """Pick two universities with the richest retrieved context."""
+    #  Retrieves context per uni and ranks by length as a proxy for “richness”.
     items: List[Tuple[str, str]] = []
     for uni in all_unis:
         ctx = retrieve_context_for_uni(db, uni, prefs, k=16)
@@ -281,6 +300,7 @@ def _pick_top2_by_context(db: Chroma, prefs: Dict, all_unis: List[str]) -> List[
 
 def _enforce_consistency(markdown: str, best_uni: str) -> str:
     """Only force the Best fit header to match the chosen university."""
+    #  Ensures the header is stable and aligned with the selected best university.
     text = markdown or ""
     if re.search(r"^#\s*Best fit:.*$", text, flags=re.M):
         text = re.sub(r"^#\s*Best fit:.*$", f"# Best fit: {best_uni}", text, flags=re.M)
@@ -290,12 +310,14 @@ def _enforce_consistency(markdown: str, best_uni: str) -> str:
 
 def _strip_numbers_if_no_budget(text: str, has_budget: bool) -> str:
     """If no budget/aid evidence was found in context, scrub specific numbers from the 'why fit' prose."""
+    #  Defensive—avoid unsupported dollar figures/percentages when budget evidence is missing.
     if has_budget:
         return text
     return re.sub(r'(\$?\d[\d,]*(\.\d+)?\s*(k|K)?(%|\b))|(\$+\s?\d[\d,]*)', ' ', text)
 
 def _force_second_person(s: str) -> str:
     """Convert 'I/I'm' phrasing to 'you/your' if the model slips."""
+    #  Normalizes pronouns to enforce a student-facing voice.
     if not s:
         return s
     # handle common cases
@@ -312,14 +334,17 @@ def _force_second_person(s: str) -> str:
     return s.strip()
 
 def _line_mentions_setting(line: str) -> bool:
+    #  True if a line references campus setting keywords.
     t = line.lower()
     return any(w in t for w in SETTING_WORDS)
 
 def _line_mentions_ratio(line: str) -> bool:
+    #  True if a line references student–faculty ratio or explicit ratios like “6:1”.
     t = line.lower()
     return ("ratio" in t) or bool(re.search(r"\b\d{1,2}\s*:\s*\d{1,2}\b", t))
 
 def _line_has_numbers(line: str) -> bool:
+    #  Detects any numeric tokens (dollars, percents, integers).
     return bool(re.search(r"(\$?\d[\d,]*|\b\d+%|\b\d+\b)", line))
 
 def _format_reason_bullets(text: str, fields: dict, max_items: int = 4) -> List[str]:
@@ -327,6 +352,7 @@ def _format_reason_bullets(text: str, fields: dict, max_items: int = 4) -> List[
     Take the LLM 'reasons' output (bulleted or lines), filter unsupported claims,
     force second-person, and format as clean '- reason' bullets (max N).
     """
+    #  Cleans raw reasons, removes numbering, filters unsupported claims, enforces length and tone.
     if not text:
         return []
     # Split into lines; drop headers/preambles/numbered list markers
@@ -368,6 +394,7 @@ def _format_reason_bullets(text: str, fields: dict, max_items: int = 4) -> List[
 
 # ====== MAIN RECOMMENDER ======
 def recommend(freetext: str) -> str:
+    #  Orchestrates parse → retrieve → generate (why + reasons) → guardrails → markdown.
     prefs = parse_preferences(freetext)
 
     emb = get_embedding_function()
@@ -479,6 +506,8 @@ def recommend(freetext: str) -> str:
 
 # ====== CLI ======
 def main():
+    #  CLI entrypoint. Example:
+    #    python recommendation.py "urban Northeast, strong CS, small classes, housing, scholarships, ~60k total, club rowing"
     ap = argparse.ArgumentParser()
     ap.add_argument("preferences", type=str, help="Free-text preferences from the student")
     args = ap.parse_args()
@@ -488,4 +517,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

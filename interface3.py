@@ -1,19 +1,26 @@
-# app.py
+# interface3.py
+# Purpose: Streamlit frontend for UniScout. Provides three modes:
+#   1) "learn"      → Ask about one university (RAG over brochures)
+#   2) "compare"    → Compare the same question across multiple universities
+#   3) "recommend"  → Get personalized school recommendations
+# UX: Chat-style interface with session state to track messages and flow.
+
 import io
 import html
 import contextlib
 import streamlit as st
 
-from query_data import query_rag
+from query_data import query_rag                     # RAG: answers about a single university
 # ✅ compare flow
-from comparing import compare_universities
+from comparing import compare_universities           # CLI function that prints comparison bullets to stdout
 # ✅ recommendation flow (returns (rec_text, top))
-from final_recomm import recommend as recommend_universities
+from final_recomm import recommend as recommend_universities  # Returns markdown recommendation text
 
 # --- PAGE SETUP (must come first) ---
 st.set_page_config(page_title="Uni Assistant", page_icon=":university:", layout="centered")
 
 # --- GLOBAL STYLES (frame + chat vibe + logo + centered landing) ---
+# Note: We inject CSS into Streamlit to create a card-like layout and chat bubbles.
 st.markdown(
     """
     <style>
@@ -125,6 +132,7 @@ ASSISTANT_AVATAR = "🧑‍🎓"
 USER_AVATAR = "🙋‍♀️"
 
 # --- SESSION STATE INIT ---
+# We maintain mode and message history across reruns to simulate a chat app.
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "mode" not in st.session_state:
@@ -136,12 +144,15 @@ if "end_chat" not in st.session_state:
 
 # --- MESSAGE HELPERS ---
 def assistant_say(text: str):
+    # Append an assistant message to the chat history
     st.session_state.messages.append(("assistant", text))
 
 def user_say(text: str):
+    # Append a user message to the chat history
     st.session_state.messages.append(("user", text))
 
 def _strip_wrapping_quotes(s: str) -> str:
+    # Remove symmetrical wrapping quotes if present: “...”, "...", '...', «...»
     if not s:
         return s
     s = s.strip()
@@ -152,6 +163,7 @@ def _strip_wrapping_quotes(s: str) -> str:
     return s
 
 def add_mode_separator(new_mode: str):
+    # Insert a visual separator message when switching modes
     pretty = {
         "learn": "Switched to: Investigate one university",
         "compare": "Switched to: Compare universities",
@@ -161,6 +173,7 @@ def add_mode_separator(new_mode: str):
 
 # --- END CHAT SCREEN ---
 def end_chat_screen():
+    # Final “goodbye” screen; stops further Streamlit execution.
     st.title("🎓 UNISCOUT")
     st.success("Thanks for chatting with UNISCOUT! 👋 Have a great day exploring universities.")
     st.stop()
@@ -168,6 +181,8 @@ def end_chat_screen():
 # --- PARSER: comparing.py stdout -> {uni: [bullets]} ---
 def parse_comparison_stdout(text: str):
     """
+    Parse the stdout produced by compare_universities() into a dict:
+      { "<University Name>": ["bullet 1", "bullet 2", ...], ... }
     Expected format:
     Comparison:
 
@@ -198,6 +213,7 @@ def parse_comparison_stdout(text: str):
 
 # --- RENDERERS ---
 def render_comparison(unis_dict):
+    # Render comparison bullets for each university
     st.markdown("Here’s your comparison:")
     for uni, bullets in unis_dict.items():
         st.markdown(f"**{uni}**")
@@ -205,13 +221,14 @@ def render_comparison(unis_dict):
         st.write("")  # spacer
 
 def render_recommendation_markdown(md: str):
+    # Render advisor-style markdown text (single block)
     st.markdown(md if md else "⚠️ No recommendation text was returned.")
-
 
 def render_recommendations_struct(rec_text, top):
     """
-    rec_text: advisor paragraph (markdown ok)
-    top: List[Tuple[str, float, str]] => (university, score, why)
+    Render structured recommendations:
+      rec_text: advisor paragraph (markdown ok)
+      top: List[Tuple[str, float, str]] => (university, score, reason)
     """
     if rec_text:
         st.markdown(rec_text)
@@ -227,6 +244,7 @@ def render_recommendations_struct(rec_text, top):
             st.write("")  # spacer
 
 def render_history():
+    # Repaint the chat history (assistant/user/separator messages)
     for role, content in st.session_state.messages:
         if role == "separator":
             st.markdown(f"<div class='mode-sep'>{content}</div>", unsafe_allow_html=True)
@@ -239,6 +257,7 @@ if st.session_state.end_chat:
     end_chat_screen()
 
 # --- LANDING (mode chooser) ---
+# The landing screen offers three buttons to select a mode and reruns the app to proceed.
 # --- LANDING (mode chooser) ---
 if st.session_state.mode is None:
     st.markdown(
@@ -296,13 +315,14 @@ if st.session_state.mode is None:
 
 
 # --- CHAT HISTORY (inside chat-style box) ---
+# We render the chat area (messages) before the input widgets for each mode.
 st.markdown('<div class="stChat">', unsafe_allow_html=True)
 render_history()
 st.markdown('</div>', unsafe_allow_html=True)
 
 # --- STEP 2: ASK / COMPARE / RECOMMEND FLOW ---
 if st.session_state.mode == "learn":
-    # Only show the input when we're NOT in the "what else?" stage
+    # Single-university Q&A (RAG). Show input only when not awaiting the next action.
     if not st.session_state.awaiting_next:
         with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
             st.markdown("Ask me a question about one university (e.g., *What are some traditions at Harvard?*)")
@@ -322,7 +342,8 @@ if st.session_state.mode == "learn":
             st.experimental_rerun()
 
 elif st.session_state.mode == "compare":
-    # Only show the compare inputs if we are NOT already awaiting the “what else?” stage.
+    # Compare the same question across multiple universities using the CLI-style function.
+    # We capture its stdout and parse it into a structured dict for display.
     if not st.session_state.awaiting_next:
         with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
             st.markdown(
@@ -371,6 +392,7 @@ elif st.session_state.mode == "compare":
             st.experimental_rerun()
 
 elif st.session_state.mode == "recommend":
+    # Collect preference text → get markdown recommendation from the recommender.
     if not st.session_state.awaiting_next:
         with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
             st.markdown(
@@ -405,6 +427,7 @@ elif st.session_state.mode == "recommend":
             st.experimental_rerun()
 
 # --- STEP 3: CONTINUE OR END CHAT ---
+# After any action completes, offer follow-up options.
 if st.session_state.awaiting_next:
     with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
         st.markdown("Would you like to do anything else?")

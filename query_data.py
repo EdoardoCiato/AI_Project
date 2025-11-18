@@ -1,8 +1,8 @@
-import argparse #to read command line arguments
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_community.llms.ollama import Ollama
-from get_embedding_function import get_embedding_function
-from langchain_community.vectorstores import Chroma
+import argparse  # Read command-line arguments
+from langchain_core.prompts import ChatPromptTemplate  # Build and format prompts
+from langchain_community.llms.ollama import Ollama  # Interface to local Ollama models
+from get_embedding_function import get_embedding_function  # Custom embedding helper
+from langchain_community.vectorstores import Chroma  # Vector database for retrieval
 
 
 
@@ -47,18 +47,20 @@ Example style:
 Now, write your answer in this tone:
 """
 
-CHROMA_PATH = "./chroma_db"
+CHROMA_PATH = "./chroma_db"  # Path to the Chroma vector database
 
 
-
-def main(): 
+def main():
+    # Command-line interface: takes a query string as input
     parser = argparse.ArgumentParser()
     parser.add_argument("query_text", type=str, help="The query text.")
     args = parser.parse_args()
     query_text = args.query_text
     query_rag(query_text)
 
+
 def detect_university_from_question(question: str, db) -> str | None:
+    """Detect which university the question refers to by scanning the vector store metadata."""
     all_items = db.get(include=["metadatas"])
     universities = set()
 
@@ -70,25 +72,28 @@ def detect_university_from_question(question: str, db) -> str | None:
             universities.add(uni)
     print(universities)
     q = question.lower()
-    # Ordina per lunghezza decrescente, così "university of california, berkeley"
-    # batte "berkeley"
+    # Sort by descending length so longer names (like "University of California, Berkeley")
+    # match before shorter aliases (like "Berkeley")
     for uni in sorted(universities, key=len, reverse=True):
         uni_lower = uni.lower()
-        # Spezza "stanford university" in ["stanford", "university"]
+        # Split names like "Stanford University" into ["stanford", "university"]
         tokens = [t for t in uni_lower.replace(",", " ").replace("-", " ").split() if len(t) > 3]
-        print("Provo a matchare:", uni, "con tokens:", tokens)
+        print("Trying to match:", uni, "with tokens:", tokens)
         print(tokens)
-        # Se almeno una parola "forte" è nella domanda → match
+        # If any strong token appears in the question, consider it a match
         if any(token in q for token in tokens):
             print("Detected university from question:", uni)
             return uni
 
     return None
 
+
 def query_rag(query_text: str):
+    """RAG pipeline: retrieve relevant text, build prompt, and query the LLM."""
     embedding_function = get_embedding_function()
     db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embedding_function)
 
+    # Try to detect the target university
     uni = detect_university_from_question(query_text, db)
     print(uni)
     if uni:
@@ -96,37 +101,46 @@ def query_rag(query_text: str):
             query_text,
             k=8,
             filter={"university": uni}
-
         )
     else:
-        # fallback: niente filtro se non capiamo l'università
+        # Fallback: no filter if the university is unknown
         results = db.similarity_search_with_score(query_text, k=8)
+
     chunks = []
     sources = []
-    # Search the DB.
+
+    # Collect relevant document chunks and citations
     for doc, score in results:
         title = doc.metadata.get("title", "Document")
         page = doc.metadata.get("page_label", doc.metadata.get("page", "?"))
-
         citation = f"[{title} (p. {page})]"
         chunk_text = f"{citation}\n{doc.page_content}"
-
         chunks.append(chunk_text)
         sources.append(citation)
 
+    # Build full context for the prompt
     context_text = "\n\n".join(chunks)
-
     context_text = "\n\n---\n\n".join([doc.page_content for doc, _score in results])
-    prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
-    prompt = prompt_template.format(context=context_text, question=query_text, university = uni if uni else "the target university")
-    # print(prompt)
 
+    prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
+    prompt = prompt_template.format(
+        context=context_text,
+        question=query_text,
+        university=uni if uni else "the target university"
+    )
+
+    # Initialize the Ollama model
     model = Ollama(model="gemma:7b")
+
+    # Debug info: show context sent to the model
     print("===== CONTEXT SENT TO THE MODEL =====")
     print(context_text)
     print("=====================================")
+
+    # Query the model
     response_text = model.invoke(prompt)
 
+    # Track document IDs as sources
     sources = [doc.metadata.get("id", None) for doc, _score in results]
     formatted_response = f"Response: {response_text}\nSources: {sources}"
     print(formatted_response)
@@ -134,4 +148,4 @@ def query_rag(query_text: str):
 
 
 if __name__ == "__main__":
-    main()
+    main()  # Entry point for CLI execution
