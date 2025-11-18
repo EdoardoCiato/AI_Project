@@ -80,5 +80,17 @@ Run the Streamlit application:
 ```bash
 streamlit run interface3.py
 ```    
-   
+
+## 4. Description of the files 
+
+| File                                   | Description                                                                                                                                                                                                                                         |
+| :------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **populate_database.py**               | Loads all PDF brochures from the `./data` folder, splits them into text chunks, generates embeddings using **mxbai-embed-large**, and stores them in a Chroma vector database for retrieval. |
+| **get_embedding_function.py**          | Defines and initializes the embedding model used for converting text into vector representations. It provides the embedding function to other modules (e.g., for populating or querying the database).                                              |
+| **query_data.py**                      | First mode of the solution, where students can ask specific information about a university. Handles queries to the vector database. It retrieves the most relevant text chunks based on a user’s question using semantic similarity search and prepares the context for the language model. When calling it the university must be specified in the query.                                                    |
+| **comparing.py**                       | Provides functions to compare universities on specific information. Need to specify which uni to compare in the query.                                                                               |
+| **final_recomm.py**                    | Implements the logic for generating tailored university recommendations. It combines query results and LLM reasoning (via Ollama) to produce the final ranked suggestions.                                                                          |
+| **interface3.py**                      | The main Streamlit web application file. It runs the interactive interface where users can type queries, receive results, and view recommendations in real time.                                                                                    |
+| **sample_question_recommendation.txt** | Contains example user queries for the different modes. Used for testing and demonstration.                                                                |
+
       
